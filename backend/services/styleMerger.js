@@ -1,36 +1,47 @@
 const cheerio = require("cheerio");
 
+function normalize(text) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function mergeStyles(html, structure) {
   const $ = cheerio.load(html);
 
   const elements = $("p, h1, h2, h3").toArray();
 
-  // Cursor prevents matching the same XML paragraph twice when multiple
-  // HTML elements have identical/near-identical text (e.g. repeated
-  // boilerplate, multiple empty paragraphs).
+  // Match HTML paragraphs to XML paragraphs in document order so the
+  // mapping is deterministic and does not depend on fuzzy text search.
+  const meaningfulStructure = structure.filter((entry) => normalize(entry.text || "").length > 0);
   let structureCursor = 0;
 
-  function findStructureMatch(text) {
-    const needle = text.trim().substring(0, 15);
-    if (!needle) return { xml: null, index: -1 };
+  function findStructureMatch(rawText) {
+    const target = normalize(rawText);
+    if (!target) return { xml: null, index: -1, reason: "empty-text" };
 
-    for (let i = structureCursor; i < structure.length; i++) {
-      const candidate = structure[i];
-      if (candidate.text && candidate.text.includes(needle)) {
-        structureCursor = i + 1;
-        return { xml: candidate, index: i };
-      }
+    const candidate = meaningfulStructure[structureCursor];
+
+    if (!candidate) {
+      return { xml: null, index: -1, reason: "no-xml-paragraphs-left" };
     }
-    return { xml: null, index: -1 };
+
+    const index = structure.findIndex((entry) => entry === candidate);
+    structureCursor += 1;
+
+    return { xml: candidate, index, reason: "ordered-sequential" };
   }
 
-  elements.forEach((el) => {
+  elements.forEach((el, elementIndex) => {
     let $el = $(el);
     let text = $el.text().trim();
 
-    const { xml, index } = findStructureMatch(text);
+    const { xml, index, reason } = findStructureMatch(text);
 
-    if (!xml) return;
+    if (!xml) {
+      console.warn(
+        `Unmatched HTML paragraph at element ${elementIndex}: "${text}" (reason: ${reason})`
+      );
+      return;
+    }
 
     // Tag every matched element with its originating XML paragraph index,
     // so extractSections can read it directly instead of re-matching text.

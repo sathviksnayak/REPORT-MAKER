@@ -63,6 +63,7 @@ app.post("/generate-report", upload.single("file"), async (req, res) => {
     STEP 2: CONTENT DOCX -> HTML -> AI REWRITE
     ==========================
     */
+
     const structure = await extractStructure(contentPath);
 
     const result = await mammoth.convertToHtml(
@@ -83,13 +84,21 @@ app.post("/generate-report", upload.single("file"), async (req, res) => {
 
     // mergeStyles now injects data-index="N" onto each matched element
     html = mergeStyles(html, structure);
-const match = html.match(/data-index="\d+"/g);
-console.log(match?.slice(0, 20));
+
     // extractSections reads data-index directly — no structure arg needed
     const sections = extractSections(html);
-    console.log(
-  JSON.stringify(sections[0], null, 2)
-);
+    const unmatchedParagraphs = sections.flatMap((section) =>
+      section.paragraphs.filter((paragraph) => paragraph.xmlIndex === -1)
+    );
+
+    if (unmatchedParagraphs.length > 0) {
+      console.error(
+        `Paragraph mapping failed for ${unmatchedParagraphs.length} paragraph(s). Sample:`,
+        unmatchedParagraphs.slice(0, 10)
+      );
+      throw new Error("Paragraph mapping failed for one or more HTML paragraphs");
+    }
+
     // updateSections preserves xmlIndex through the AI rewrite step
     const updated = await updateSections(sections, topic);
 
@@ -133,55 +142,97 @@ console.log(match?.slice(0, 20));
     zip.updateFile("word/document.xml", Buffer.from(newXml, "utf8"));
     const updatedContentBuffer = zip.toBuffer();
 
-    /*
-    ==========================
-    STEP 4: CREATE ZIP ON DISK (verify before streaming to client)
-    ==========================
-    */
-    const output = fs.createWriteStream(zipPath);
-    const archive = archiver("zip", { zlib: { level: 9 } });
 
-    archive.on("warning", console.warn);
-    archive.on("error", (err) => {
-      throw err;
-    });
+    console.log("Updated content buffer:", updatedContentBuffer.length);
 
-    archive.pipe(output);
+// Debug only
+fs.writeFileSync("debug-content.docx", updatedContentBuffer);
+/*
+==========================
+STEP 4: CREATE ZIP
+==========================
+*/
 
-    archive.append(fs.readFileSync(staticPath), {
-      name: "Report_Cover_and_Certificate.docx",
-    });
-    archive.append(updatedContentBuffer, {
-      name: "Report_AI_Content.docx",
-    });
+console.log("Static DOCX size:", staticBuffer.length);
+console.log("Updated DOCX size:", updatedContentBuffer.length);
 
-    await archive.finalize();
+// Uncomment this once to verify the generated DOCX itself.
+// fs.writeFileSync("debug-content.docx", updatedContentBuffer);
 
-    await new Promise((resolve, reject) => {
-      output.on("close", resolve);
-      output.on("error", reject);
-    });
+const output = fs.createWriteStream(zipPath);
+const archive = archiver("zip", {
+  zlib: { level: 9 },
+});
 
-    console.log("ZIP created. Size:", fs.statSync(zipPath).size);
+const archiveDone = new Promise((resolve, reject) => {
+  output.on("close", resolve);
+  output.on("error", reject);
 
-    /*
-    ==========================
-    STEP 5: SEND ZIP
-    ==========================
-    */
-    res.download(zipPath, "Report.zip", (err) => {
-      if (err) console.error("Download error:", err);
-      if (fs.existsSync(zipPath)) {
-        fs.unlinkSync(zipPath);
-      }
-    });
+  archive.on("error", reject);
+
+  archive.on("warning", (err) => {
+    if (err.code === "ENOENT") {
+      console.warn(err);
+    } else {
+      reject(err);
+    }
+  });
+});
+
+archive.pipe(output);
+
+archive.append(fs.readFileSync(staticPath), {
+  name: "Report_Cover_and_Certificate.docx",
+});
+
+archive.append(updatedContentBuffer, {
+  name: "Report_AI_Content.docx",
+});
+
+await archive.finalize();
+await archiveDone;
+
+console.log("ZIP size:", fs.statSync(zipPath).size);
+
+// Verify the ZIP we just created
+const verifyZip = new AdmZip(zipPath);
+
+console.log(
+  "ZIP entries:",
+  verifyZip.getEntries().map((e) => ({
+    name: e.entryName,
+    size: e.header.size,
+  }))
+);
+
+/*
+==========================
+STEP 5: SEND ZIP
+==========================
+*/
+
+res.download(zipPath, `Report.zip`, (err) => {
+  if (err) {
+    console.error("Download error:", err);
+  }
+
+  try {
+    if (fs.existsSync(zipPath)) {
+      fs.unlinkSync(zipPath);
+    }
+  } catch (e) {
+    console.error("Failed to delete zip:", e);
+  }
+});
   } catch (err) {
     console.error(err);
+
     if (!res.headersSent) {
       res.status(500).send("Error generating report");
     }
   } finally {
     const files = [filePath, staticPath, contentPath];
+
     files.forEach((file) => {
       if (file && fs.existsSync(file)) {
         try {
@@ -193,6 +244,8 @@ console.log(match?.slice(0, 20));
     });
   }
 });
+
+
 
 app.listen(5000, () => {
   console.log("Server running on port 5000");
