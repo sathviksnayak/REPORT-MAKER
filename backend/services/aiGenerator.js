@@ -70,6 +70,12 @@ Report Topic:
 ${topic}
 
 Rules:
+The report topic has changed.
+Rewrite every paragraph so it naturally discusses the NEW topic.
+Do not merely replace keywords.
+Do not mention the original topic.
+Preserve the same structure, academic tone, and approximate paragraph length.
+If an example is specific to the old topic, replace it with an equivalent example for the new topic.
 - Rewrite every paragraph independently.
 - Preserve meaning.
 - Preserve academic tone.

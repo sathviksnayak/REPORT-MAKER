@@ -4,73 +4,37 @@ require("dotenv").config();
 const { parseDocx } = require("./services/parseDocx");
 const { findSections } = require("./services/findSections");
 const { rewriteSections } = require("./services/rewriteSections");
-function getRunText(r) {
-    const t = r["w:t"]?.[0];
-    if (t === undefined) return "";
-    return typeof t === "string" ? t : (t._ || "");
-}
-
-function getParagraphText(p) {
-    return (p["w:r"] || []).map(getRunText).join("");
-}
-const topics = [
-    "Space Exploration",
-    "Artificial Intelligence in Healthcare",
-    "Renewable Energy",
-    "Wildlife Conservation",
-    "Climate Change",
-    "History of Chess",
-    "Ancient Roman Architecture",
-    "Quantum Computing",
-    "Electric Vehicles",
-    "Ocean Pollution",
-    "Cyber Security",
-    "Coffee Cultivation",
-    "Mars Colonization",
-    "Blockchain in Supply Chains",
-    "History of the Internet"
-];
+const { saveDocx } = require("./services/saveDocx");
 
 async function main() {
-    const { paragraphs } = await parseDocx(
-        path.join(__dirname, "sample.docx")
-    );
+    try {
+        const {
+            zip,
+            parsed,
+            paragraphs
+        } = await parseDocx(
+            path.join(__dirname, "sample.docx")
+        );
 
-    const sections = findSections(paragraphs, true);
+        // const sections = findSections(paragraphs);
 
-    console.log(`Sections found: ${sections.length}`);
+        // console.log(`Sections found: ${sections.length}`);
 
-    const randomTopic =
-        topics[Math.floor(Math.random() * topics.length)];
+        // await rewriteSections(
+        //     sections,
+        //     "blockchain"
+        // );
 
-    console.log(`\nRandom Topic: ${randomTopic}`);
+        await saveDocx(
+            zip,
+            parsed,
+            path.join(__dirname, "output.docx")
+        );
 
-    console.log("\nBefore rewrite:\n");
-    console.log(sections[0].content[0].originalText);
-
-   const firstSection = sections[0];
-
-console.log("\n===== BEFORE =====\n");
-firstSection.content
-    .filter(x => x.type === "paragraph")
-    .forEach((p, i) => {
-        console.log(`Paragraph ${i + 1}`);
-        console.log(p.originalText);
-        console.log();
-    });
-
-await rewriteSections(sections, randomTopic);
-
-console.log("\n===== AFTER =====\n");
-firstSection.content
-    .filter(x => x.type === "paragraph")
-    .forEach((p, i) => {
-        console.log(`Paragraph ${i + 1}`);
-        console.log(getParagraphText(p.node));
-        console.log();
-    });
-
-
+        console.log("✅ Saved output.docx");
+    } catch (err) {
+        console.error(err);
+    }
 }
 
-main().catch(console.error);
+main();
