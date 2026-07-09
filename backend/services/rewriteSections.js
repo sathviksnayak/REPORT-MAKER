@@ -89,6 +89,12 @@ async function rewriteSections(sections, topic) {
     let rewritten;
     try {
       rewritten = await generateContent(section.title, topic, paragraphInputs);
+      console.log("\n===== AI OUTPUT =====");
+rewritten.forEach((p, i) => {
+    console.log(`Paragraph ${i + 1}:`);
+    console.log(p);
+    console.log();
+});
     } catch (err) {
       console.error(`AI failed for "${section.title}":`, err.message);
       continue;

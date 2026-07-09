@@ -1,4 +1,4 @@
-  const Groq = require("groq-sdk");
+const Groq = require("groq-sdk");
 
 let groqClient;
 
@@ -8,7 +8,6 @@ function getGroqClient() {
       apiKey: process.env.GROQ_API_KEY,
     });
   }
-
   return groqClient;
 }
 
@@ -17,73 +16,93 @@ function parseSectionResponse(content, expectedParagraphCount) {
     throw new Error("Empty AI response");
   }
 
-  const trimmed = content.trim();
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  const candidate = fencedMatch ? fencedMatch[1].trim() : trimmed;
-  const jsonStart = candidate.indexOf("{");
-  const jsonEnd = candidate.lastIndexOf("}");
-  const payload = jsonStart >= 0 && jsonEnd > jsonStart
-    ? candidate.slice(jsonStart, jsonEnd + 1)
-    : candidate;
+  let parsed;
 
-  const parsed = JSON.parse(payload);
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    // Fallback if the model wraps JSON in extra text
+    const match = content.match(/\{[\s\S]*\}/);
 
-  if (!parsed || !Array.isArray(parsed.paragraphs)) {
-    throw new Error("AI response did not contain a paragraphs array");
+    if (!match) {
+      throw new Error("No JSON object found in AI response");
+    }
+
+    parsed = JSON.parse(match[0]);
+  }
+
+  if (!Array.isArray(parsed.paragraphs)) {
+    throw new Error("AI response missing paragraphs array");
   }
 
   return parsed.paragraphs
-    .filter((paragraph) => typeof paragraph === "string" && paragraph.trim())
+    .filter(p => typeof p === "string" && p.trim())
     .slice(0, expectedParagraphCount);
 }
 
 async function generateContent(title, topic, paragraphInputs) {
-  
-  const normalizedParagraphs = (Array.isArray(paragraphInputs) ? paragraphInputs : [paragraphInputs]).map((paragraph) => {
-    if (typeof paragraph === "string") {
-      return { text: paragraph };
-    }
 
-    return {
-      text: paragraph?.text || "",
-    };
-  });
+  const normalizedParagraphs = (
+    Array.isArray(paragraphInputs)
+      ? paragraphInputs
+      : [paragraphInputs]
+  ).map(p => ({
+    text: typeof p === "string" ? p : (p?.text || "")
+  }));
 
   if (normalizedParagraphs.length === 0) {
     return [];
   }
 
   const paragraphOrder = normalizedParagraphs
-    .map((paragraph, index) => `Paragraph ${index + 1}:\n${paragraph.text}`)
+    .map((p, i) => `Paragraph ${i + 1}:\n${p.text}`)
     .join("\n\n");
 
-  const prompt = `
-You are rewriting each paragraph in the "${title}" section of an academic report on "${topic}".
+  const expectedCount = normalizedParagraphs.length;
 
-Important rules:
-- Rewrite EACH paragraph independently.
-- Preserve the original meaning.
-- Use a formal academic tone.
-- Preserve the same number of paragraphs.
+  const prompt = `
+Rewrite the following academic report section.
+
+Section Title:
+${title}
+
+Report Topic:
+${topic}
+
+Rules:
+- Rewrite every paragraph independently.
+- Preserve meaning.
+- Preserve academic tone.
 - Do NOT merge paragraphs.
 - Do NOT split paragraphs.
 - Do NOT add new facts.
-- Return ONLY valid JSON in this exact format:
-{"paragraphs":["rewritten paragraph 1","rewritten paragraph 2"]}
-No markdown.
-No explanation.
-No code fences.
+- Return EXACTLY ${expectedCount} paragraphs.
+- Return ONLY valid JSON.
 
-Section title: ${title}
-Report topic: ${topic}
+Return this exact structure:
 
-Paragraph order:
+{
+  "paragraphs": [
+    "...",
+    "...",
+    "..."
+  ]
+}
+
+The array MUST contain exactly ${expectedCount} strings.
+
 ${paragraphOrder}
 `;
 
   try {
+
     const response = await getGroqClient().chat.completions.create({
       model: "llama-3.1-8b-instant",
+
+      response_format: {
+        type: "json_object",
+      },
+
       messages: [
         {
           role: "user",
@@ -92,12 +111,28 @@ ${paragraphOrder}
       ],
     });
 
-    const aiContent = response.choices?.[0]?.message?.content?.trim() || "";
-    return parseSectionResponse(aiContent, normalizedParagraphs.length);
+    const aiContent =
+      response.choices?.[0]?.message?.content?.trim() || "";
+
+    return parseSectionResponse(aiContent, expectedCount);
+
   } catch (err) {
-    console.error(`AI section rewrite failed for "${title}". Reusing original paragraphs.`, err);
-    return normalizedParagraphs.map((paragraph) => paragraph.text);
+
+    console.error(`AI section rewrite failed for "${title}"`);
+
+    if (err instanceof SyntaxError) {
+      console.log("\n========== RAW AI RESPONSE ==========");
+      console.log(err.message);
+      console.log("=====================================\n");
+    }
+
+    console.error(err);
+
+    return normalizedParagraphs.map(p => p.text);
   }
 }
 
-module.exports = { generateContent, parseSectionResponse };
+module.exports = {
+  generateContent,
+  parseSectionResponse,
+};
