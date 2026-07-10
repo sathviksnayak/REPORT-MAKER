@@ -1,31 +1,39 @@
-# REPORT-MAKER
+# REPORT MAKER
 
-An AI-powered report generation tool that automates the creation and formatting of academic reports from user-provided content.
+An AI-powered web application that rewrites academic reports by automatically changing the report topic while preserving the original Microsoft Word (.docx) document structure and formatting.
 
 ## Features
 
-- Upload Word (.docx) documents
-- AI-assisted content generation and rewriting
-- Preserves document structure and formatting
-- Generates downloadable report documents
-- Backend API built with Node.js and Express
-- Frontend built with React
+- Upload Microsoft Word (.docx) reports
+- AI-powered section-wise content rewriting
+- Automatically detects report sections
+- Option to skip cover/certificate pages
+- Preserves document formatting and layout
+- Downloads the rewritten report as a `.docx`
+- React frontend with Express backend
+
+---
 
 ## Tech Stack
 
 ### Frontend
 - React
 - Vite
+- CSS
 
 ### Backend
 - Node.js
 - Express.js
+- Multer
 
-### Libraries
-- Mammoth
-- Docx
-- OpenAI API
-- Other document processing utilities
+### AI
+- Groq API (LLM)
+
+### Document Processing
+- @xmldom/xmldom
+- adm-zip
+
+---
 
 ## Project Structure
 
@@ -36,7 +44,8 @@ REPORT-MAKER/
 │   ├── services/
 │   ├── uploads/
 │   ├── server.js
-│   └── package.json
+│   ├── package.json
+│   └── .env
 │
 ├── frontend/
 │   ├── src/
@@ -45,6 +54,8 @@ REPORT-MAKER/
 │
 └── README.md
 ```
+
+---
 
 ## Installation
 
@@ -68,37 +79,59 @@ npm start
 ```bash
 cd frontend
 npm install
-npm run dev
+npm start
 ```
+
+---
 
 ## Environment Variables
 
 Create a `.env` file inside the `backend` directory.
 
-Example:
-
 ```env
-OPENAI_API_KEY=your_api_key
+GROQ_API_KEY=your_api_key
 PORT=5000
 ```
 
-> Do **not** commit your `.env` file.
+---
+
+## How It Works
+
+1. Upload a `.docx` report.
+2. Enter the new report topic.
+3. (Optional) Indicate if the document contains a cover/certificate page.
+4. The backend:
+   - Parses the document XML
+   - Detects report sections
+   - Sends each section to the LLM for rewriting
+   - Replaces only the paragraph text while preserving formatting
+   - Generates a new `.docx`
+5. Download the rewritten report.
+
+---
 
 ## Current Functionality
 
-- Document upload
-- AI content generation
-- Section processing
-- Report generation
-- Document formatting pipeline
+- Upload Word documents
+- Automatic section detection
+- AI-based report rewriting
+- Formatting preservation
+- DOCX regeneration
+- Download rewritten report
 
-## Future Improvements
+---
 
-- User authentication
-- Report templates
+## Planned Features
+
+- User authentication (JWT + MongoDB)
+- Report history
+- Multiple rewrite modes
+- Heading rewriting
 - PDF export
-- Version history
-- Cloud storage integration
+- Cloud deployment
+- Report templates
+
+---
 
 ## License
 
