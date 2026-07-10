@@ -1,48 +1,82 @@
 const { generateContent } = require("./aiGenerator");
 
-function getRunText(r) {
-  const t = r["w:t"]?.[0];
-  if (t === undefined) return "";
-  return typeof t === "string" ? t : (t._ || "");
+function getRunText(run) {
+    const textNodes = run.getElementsByTagName("w:t");
+
+    let text = "";
+
+    for (let i = 0; i < textNodes.length; i++) {
+        text += textNodes[i].textContent;
+    }
+
+    return text;
 }
 
-function replaceParagraphText(p, newText) {
-  const runs = p["w:r"] || [];
-  if (runs.length === 0) return;
+function replaceParagraphText(paragraph, newText) {
 
-  if (runs.length === 1) {
-    const needsPreserve = /^\s|\s$/.test(newText);
-    runs[0]["w:t"] = [needsPreserve
-      ? { _: newText, $: { "xml:space": "preserve" } }
-      : newText];
-    return;
-  }
+    const runs = Array.from(paragraph.getElementsByTagName("w:r"));
 
-  const originalLengths = runs.map(r => getRunText(r).length);
-  const totalLen = originalLengths.reduce((a, b) => a + b, 0);
+    if (runs.length === 0) return;
 
-  if (totalLen === 0) {
-    runs[0]["w:t"] = [newText];
-    for (let i = 1; i < runs.length; i++) runs[i]["w:t"] = [""];
-    return;
-  }
+    const textNodes = runs.map(run => {
+        const nodes = run.getElementsByTagName("w:t");
+        return nodes.length ? nodes[0] : null;
+    });
 
-  let cursor = 0;
-  runs.forEach((run, i) => {
-    if (i === runs.length - 1) {
-      run["w:t"] = [newText.slice(cursor) || ""];
-      return;
+    const originalLengths = textNodes.map(node =>
+        node ? node.textContent.length : 0
+    );
+
+    const totalLen = originalLengths.reduce((a, b) => a + b, 0);
+
+    // Only one run
+    if (textNodes.length === 1) {
+        if (textNodes[0]) {
+            textNodes[0].textContent = newText;
+        }
+        return;
     }
-    const proportion = originalLengths[i] / totalLen;
-    let end = cursor + Math.round(newText.length * proportion);
-    while (end < newText.length && newText[end] !== " ") end++;
-    const slice = newText.slice(cursor, end).trimEnd();
-    const needsPreserve = /^\s|\s$/.test(slice);
-    run["w:t"] = [needsPreserve ? { _: slice, $: { "xml:space": "preserve" } } : slice];
-    // FIX 3: don't blindly skip cursor+1, only advance past the space if one exists
-    cursor = end;
-    if (newText[cursor] === " ") cursor++;
-  });
+
+    // Empty paragraph
+    if (totalLen === 0) {
+        if (textNodes[0]) {
+            textNodes[0].textContent = newText;
+        }
+
+        for (let i = 1; i < textNodes.length; i++) {
+            if (textNodes[i]) textNodes[i].textContent = "";
+        }
+
+        return;
+    }
+
+    let cursor = 0;
+
+    textNodes.forEach((node, i) => {
+
+        if (!node) return;
+
+        if (i === textNodes.length - 1) {
+            node.textContent = newText.slice(cursor);
+            return;
+        }
+
+        const proportion = originalLengths[i] / totalLen;
+
+        let end = cursor + Math.round(newText.length * proportion);
+
+        while (end < newText.length && newText[end] !== " ") {
+            end++;
+        }
+
+        node.textContent = newText.slice(cursor, end);
+
+        cursor = end;
+
+        if (newText[cursor] === " ") {
+            cursor++;
+        }
+    });
 }
 
 function reconcile(returned, expected) {
@@ -89,12 +123,13 @@ async function rewriteSections(sections, topic) {
     let rewritten;
     try {
       rewritten = await generateContent(section.title, topic, paragraphInputs);
-      console.log("\n===== AI OUTPUT =====");
-rewritten.forEach((p, i) => {
-    console.log(`Paragraph ${i + 1}:`);
-    console.log(p);
-    console.log();
+      rewritten.forEach((p, i) => {
+    console.log(`Paragraph ${i + 1}: ${
+        p === paragraphInputs[i].text ? "UNCHANGED" : "CHANGED"
+    }`);
 });
+
+
     } catch (err) {
       console.error(`AI failed for "${section.title}":`, err.message);
       continue;

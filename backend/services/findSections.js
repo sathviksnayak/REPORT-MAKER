@@ -13,21 +13,41 @@ const SKIP_SECTIONS = [
 
 const MIN_PARAGRAPH_LENGTH = 100;
 
-function getRunText(r) {
-  const t = r["w:t"]?.[0];
-  if (t === undefined) return "";
-  return typeof t === "string" ? t : (t._ || "");
+function getRunText(run) {
+  const textNodes = run.getElementsByTagName("w:t");
+
+  let text = "";
+
+  for (let i = 0; i < textNodes.length; i++) {
+    text += textNodes[i].textContent;
+  }
+
+  return text;
 }
 
-function getParagraphText(p) {
-  return (p["w:r"] || []).map(getRunText).join("").trim();
+function getParagraphText(paragraph) {
+  const runs = paragraph.getElementsByTagName("w:r");
+
+  let text = "";
+
+  for (let i = 0; i < runs.length; i++) {
+    text += getRunText(runs[i]);
+  }
+
+  return text.trim();
 }
 
-function getHeadingLevel(p) {
-  const style = p["w:pPr"]?.[0]?.["w:pStyle"]?.[0]?.$?.["w:val"];
+function getHeadingLevel(paragraph) {
+  const styles = paragraph.getElementsByTagName("w:pStyle");
+
+  if (styles.length === 0) return 0;
+
+  const style = styles[0].getAttribute("w:val");
+
   if (!style) return 0;
 
-  const match = style.match(/^Heading(\d+)/i);
+  const match = style.match(/^Heading(\d+)$/i);
+
   return match ? Number(match[1]) : 0;
 }
 
@@ -37,31 +57,26 @@ function isCaption(text) {
 
 function shouldSkip(text) {
   const t = text.toLowerCase();
+
   return SKIP_SECTIONS.some(s => t.includes(s));
 }
 
-function isMajorHeading(p, text) {
-  // Heading1 always wins
-  if (getHeadingLevel(p) === 1) return true;
+function isMajorHeading(paragraph, text) {
+  if (getHeadingLevel(paragraph) === 1) return true;
 
-  // 1.Introduction
-  // 1. Introduction
-  // 2 Conclusion
-  if (/^\d+\.?\s*[A-Za-z]/.test(text) && !/^\d+\.\d+/.test(text))
-    return true;
-
-  return false;
+  return /^\d+\.?\s*[A-Za-z]/.test(text) &&
+         !/^\d+\.\d+/.test(text);
 }
 
-function looksLikeHeading(p) {
-  return getHeadingLevel(p) >= 2;
+function looksLikeHeading(paragraph) {
+  return getHeadingLevel(paragraph) >= 2;
 }
 
 function hasRealParagraph(section) {
   return section.content.some(
-    x =>
-      x.type === "paragraph" &&
-      x.originalText.length >= MIN_PARAGRAPH_LENGTH
+    item =>
+      item.type === "paragraph" &&
+      item.originalText.length >= MIN_PARAGRAPH_LENGTH
   );
 }
 
@@ -69,9 +84,9 @@ function findSections(paragraphs, ignoreCoverPage = false) {
 
   let start = 0;
 
-  // Skip everything until first numbered chapter / Heading1
   if (ignoreCoverPage) {
     for (let i = 0; i < paragraphs.length; i++) {
+
       const text = getParagraphText(paragraphs[i]);
 
       if (!text) continue;
@@ -88,8 +103,8 @@ function findSections(paragraphs, ignoreCoverPage = false) {
 
   for (let i = start; i < paragraphs.length; i++) {
 
-    const p = paragraphs[i];
-    const text = getParagraphText(p);
+    const paragraph = paragraphs[i];
+    const text = getParagraphText(paragraph);
 
     if (!text) continue;
     if (isCaption(text)) continue;
@@ -99,32 +114,24 @@ function findSections(paragraphs, ignoreCoverPage = false) {
       continue;
     }
 
-    if (isMajorHeading(p, text)) {
+    if (isMajorHeading(paragraph, text)) {
 
       current = {
         title: text,
         content: [],
       };
-
+ 
       sections.push(current);
       continue;
     }
 
-    if (!current) continue;
+         if (!current) continue;
 
-    if (looksLikeHeading(p)) {
-      current.content.push({
-        type: "heading",
-        node: p,
-        originalText: text,
-      });
-    } else {
-      current.content.push({
-        type: "paragraph",
-        node: p,
-        originalText: text,
-      });
-    }
+    current.content.push({
+      type: looksLikeHeading(paragraph) ? "heading" : "paragraph",
+      node: paragraph,
+      originalText: text,
+    });
   }
 
   return sections.filter(hasRealParagraph);

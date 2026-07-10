@@ -61,31 +61,49 @@ async function generateContent(title, topic, paragraphInputs) {
   const expectedCount = normalizedParagraphs.length;
 
   const prompt = `
-Rewrite the following academic report section.
+You are rewriting one section of an academic report.
 
-Section Title:
+Original Section Title:
 ${title}
 
-Report Topic:
+New Report Topic:
 ${topic}
 
-Rules:
-The report topic has changed.
-Rewrite every paragraph so it naturally discusses the NEW topic.
-Do not merely replace keywords.
-Do not mention the original topic.
-Preserve the same structure, academic tone, and approximate paragraph length.
-If an example is specific to the old topic, replace it with an equivalent example for the new topic.
-- Rewrite every paragraph independently.
-- Preserve meaning.
-- Preserve academic tone.
-- Do NOT merge paragraphs.
-- Do NOT split paragraphs.
-- Do NOT add new facts.
-- Return EXACTLY ${expectedCount} paragraphs.
-- Return ONLY valid JSON.
+Your task is to rewrite EVERY paragraph so that the entire section is about the NEW report topic.
 
-Return this exact structure:
+Rules:
+
+1. The original report topic has changed to "${topic}".
+
+2. Rewrite every paragraph so it is specifically about "${topic}".
+
+3. Preserve the PURPOSE of each paragraph.
+   Examples:
+   - An introduction should remain an introduction.
+   - A conclusion should remain a conclusion.
+   - A benefits section should still discuss benefits.
+   - An experience section should still describe an experience.
+   - A feedback section should still describe feedback.
+
+4. Do NOT simply replace words.
+   Rewrite the paragraph naturally.
+
+5. Do NOT mention or refer to the original topic.
+
+6. Every paragraph MUST clearly relate to "${topic}".
+   Do NOT drift into unrelated topics.
+
+7. Replace old examples with equivalent examples that fit "${topic}".
+
+8. Keep the same number of paragraphs.
+
+9. Keep approximately the same paragraph length.
+
+10. Maintain a formal academic writing style.
+
+11. Do not include introductions, explanations, markdown, or code fences.
+
+Return ONLY valid JSON in exactly this format:
 
 {
   "paragraphs": [
@@ -95,7 +113,9 @@ Return this exact structure:
   ]
 }
 
-The array MUST contain exactly ${expectedCount} strings.
+The array MUST contain exactly ${expectedCount} paragraphs.
+
+Original paragraphs:
 
 ${paragraphOrder}
 `;

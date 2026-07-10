@@ -1,20 +1,13 @@
-const xml2js = require("xml2js");
+const { XMLSerializer } = require("@xmldom/xmldom");
 
 async function saveDocx(zip, documentXml, outputPath) {
-    // Convert JS object back to XML
-    const builder = new xml2js.Builder({
-        headless: true
-    });
+    const xml = new XMLSerializer().serializeToString(documentXml);
 
-    const updatedXml = builder.buildObject(documentXml);
-
-    // Replace word/document.xml
     zip.updateFile(
         "word/document.xml",
-        Buffer.from(updatedXml, "utf8")
+        Buffer.from(xml, "utf8")
     );
 
-    // Write new docx
     zip.writeZip(outputPath);
 }
 

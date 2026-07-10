@@ -10,28 +10,33 @@ async function main() {
     try {
         const {
             zip,
-            parsed,
+            documentXml,
             paragraphs
         } = await parseDocx(
             path.join(__dirname, "sample.docx")
         );
 
-        // const sections = findSections(paragraphs);
+        const sections = findSections(paragraphs, true);
 
-        // console.log(`Sections found: ${sections.length}`);
+        console.log(`Sections found: ${sections.length}`);
 
-        // await rewriteSections(
-        //     sections,
-        //     "blockchain"
-        // );
+        const topic = "Blockchain";
+
+        console.log(`\nTopic: ${topic}\n`);
+
+        await rewriteSections(
+            sections,
+            topic
+        );
 
         await saveDocx(
             zip,
-            parsed,
+            documentXml,
             path.join(__dirname, "output.docx")
         );
 
-        console.log("✅ Saved output.docx");
+        console.log("\n✅ output.docx saved successfully.");
+
     } catch (err) {
         console.error(err);
     }
